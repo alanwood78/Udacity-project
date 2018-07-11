@@ -186,6 +186,7 @@ model
 mmodel_ft = models.resnet18(pretrained=True)
 num_ftrs = model_ft.fc.in_features
 model_ft.fc = nn.Linear(num_ftrs, 2)
+model_ft = model_ft.to(device)
 
 criterion = nn.CrossEntropyLoss()
 # Observe that all parameters are being optimized
