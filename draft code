@@ -112,7 +112,7 @@ for param in model.parameters():
     
 model.classifier = classifier
 
-def train_model(model, criteria, optimizer, scheduler, num_epochs=25, device='cuda'):
+def train_model(model, criteria, optim, scheduler, num_epochs=25, device='cuda'):
     since = time.time()
 
     best_model_wts = copy.deepcopy(model.state_dict())
@@ -188,15 +188,15 @@ num_ftrs = model_ft.fc.in_features
 model_ft.fc = nn.Linear(num_ftrs, 2)
 model_ft = model_ft.to(device)
 
-criterion = nn.CrossEntropyLoss()
+criteria = nn.CrossEntropyLoss()
 # Observe that all parameters are being optimized
-optim = torch.optim.Adam(model_ft.parameters(), lr=0.001)
-# Decay LR by a factor of 0.1 every 4 epochs
-sched = lr_scheduler.StepLR(optim, step_size=4, gamma=0.1)
+optim = torch.optim.SGD(model_ft.parameters(), lr=0.001)
+# Decay LR by a factor of 0.1 every 7 epochs
+sched = lr_scheduler.StepLR(optim, step_size=7, gamma=0.1)
 # Number of epochs
 eps=10
 
 model_ft = model.cuda()
 
-model_ft = train_model(model_ft, criterion, optim, sched,
+model_ft = train_model(model_ft, criteria, optim, sched,
                        eps,'cuda')
