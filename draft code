@@ -1,5 +1,8 @@
 # Imports here import torch
 import os
+cwd = os.getcwd()  # Get the current working directory (cwd)
+files = os.listdir(cwd)  # Get all the files in that directory
+print("Files in '%s': %s" % (cwd, files))
 import time
 import copy
 
@@ -16,6 +19,7 @@ from torch.autograd import Variable
 import torchvision
 from torchvision import datasets, models, transforms
 
+import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from PIL import Image
@@ -24,10 +28,7 @@ from collections import OrderedDict
 num_epochs = 25
 batch_size = 32
 learning_rate = 0.001
-
-data_dir = "flowers"
-
-# TODO: Define your transforms for the training, validation, and testing sets
+# TODO: Define your transforms for the training, validation, and testing
 data_transforms = {
     'train': transforms.Compose([
             transforms.RandomResizedCrop(224),
@@ -49,13 +50,8 @@ data_transforms = {
         ]),
     }
 
-train_dir = 'train'
-valid_dir = 'valid'
-test_dir  = 'test'
-dirs = {'train': train_dir, 
-        'valid': valid_dir, 
-        'test' : test_dir}
-
+print(data_transforms)
+data_dir = "flowers"
 # Load all the image datasets with ImageFolder in torchvision
 image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir,x), data_transforms[x]) 
         for x in ['train', 'valid', 'test']}
@@ -73,7 +69,6 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 
 print(data_transforms)
-
 def imshow(inp, title=None):
     """Imshow for Tensor."""
     inp = inp.numpy().transpose((1, 2, 0))
@@ -96,11 +91,9 @@ imshow(out, title=[class_names[x] for x in classes])
 import json
 
 with open('cat_to_name.json', 'r') as f:
-cat_to_name = json.load(f)
-
-model = models.resnet18(pretrained=True)
-
-classifier = nn.Sequential(OrderedDict([
+    cat_to_name = json.load(f)
+    model = models.resnet18(pretrained=True)
+    classifier = nn.Sequential(OrderedDict([
                           ('fc1', nn.Linear(25088, 4096)),
                           ('relu', nn.ReLU()),
                           ('fc2', nn.Linear(4096, 102)),
@@ -109,10 +102,10 @@ classifier = nn.Sequential(OrderedDict([
 
 for param in model.parameters():
     param.requires_grad = False
-    
-model.classifier = classifier
-
-def train_model(model, criteria, optim, scheduler, num_epochs=25, device='cuda'):
+    loss = Variable(loss, requires_grad = True)
+    model.classifier = classifier
+    model
+    def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     since = time.time()
 
     best_model_wts = copy.deepcopy(model.state_dict())
@@ -122,55 +115,53 @@ def train_model(model, criteria, optim, scheduler, num_epochs=25, device='cuda')
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
 
-            # Each epoch has a training and validation phase
+        # Each epoch has a training and validation phase
         for phase in ['train', 'valid']:
             if phase == 'train':
                 scheduler.step()
                 model.train()  # Set model to training mode
-        else:
-            model.eval()   # Set model to evaluate mode
+            else:
+                model.eval()   # Set model to evaluate mode
 
-        running_loss = 0.0
-        running_corrects = 0
+            running_loss = 0.0
+            running_corrects = 0
 
-        # Iterate over data.
-        for inputs, labels in dataloaders[phase]:
-            inputs = inputs.to(device)
-            labels = labels.to(device)
-                  
-        def zero_grad(self):
-            for p in self.parameters():
-                if p.grad is not None:
-                    p.grad.data.zero_()
-        
+            # Iterate over data.
+            for inputs, labels in dataloaders[phase]:
+                inputs = inputs.to(device)
+                labels = labels.to(device)
+
+                # zero the parameter gradients
+                optimizer.zero_grad()
+
                 # forward
-            # track history if only in train
-        with torch.set_grad_enabled(phase == 'train'):
-                outputs = model(inputs)
-                _, preds = torch.max(outputs, 1)
-                loss = criteria(outputs, labels)
+                # track history if only in train
+                with torch.set_grad_enabled(phase == 'train'):
+                    outputs = model(inputs)
+                    _, preds = torch.max(outputs, 1)
+                    loss = criterion(outputs, labels)
 
-                # backward + optimize only if in training phase
-                if phase == 'train':
-                    loss.backward()
-                    optimizer.step()
+                    # backward + optimize only if in training phase
+                    if phase == 'train':
+                        loss.backward()
+                        optimizer.step()
 
-        # statistics
-        running_loss += loss.item() * inputs.size(0)
-        running_corrects += torch.sum(preds == labels.data)
+                # statistics
+                running_loss += loss.item() * inputs.size(0)
+                running_corrects += torch.sum(preds == labels.data)
 
-        epoch_loss = running_loss / dataset_sizes[phase]
-        epoch_acc = running_corrects.double() / dataset_sizes[phase]
+            epoch_loss = running_loss / dataset_sizes[phase]
+            epoch_acc = running_corrects.double() / dataset_sizes[phase]
 
-        print('{} Loss: {:.4f} Acc: {:.4f}'.format(
-                phase, epoch_loss, epoch_acc))       
-        
-         # deep copy the model
-        if phase == 'valid' and epoch_acc > best_acc:
+            print('{} Loss: {:.4f} Acc: {:.4f}'.format(
+                phase, epoch_loss, epoch_acc))
+
+            # deep copy the model
+            if phase == 'valid' and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_model_wts = copy.deepcopy(model.state_dict())
 
-    print()
+        print()
 
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(
@@ -180,23 +171,19 @@ def train_model(model, criteria, optim, scheduler, num_epochs=25, device='cuda')
     # load best model weights
     model.load_state_dict(best_model_wts)
     return model
-    
-model
-
-mmodel_ft = models.resnet18(pretrained=True)
+    model_ft = models.resnet18(pretrained=True)
 num_ftrs = model_ft.fc.in_features
 model_ft.fc = nn.Linear(num_ftrs, 2)
+
 model_ft = model_ft.to(device)
 
-criteria = nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss()
+
 # Observe that all parameters are being optimized
-optim = torch.optim.SGD(model_ft.parameters(), lr=0.001)
+optimizer_ft = torch.optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
+
 # Decay LR by a factor of 0.1 every 7 epochs
-sched = lr_scheduler.StepLR(optim, step_size=7, gamma=0.1)
-# Number of epochs
-eps=10
-
+exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 model_ft = model.cuda()
-
-model_ft = train_model(model_ft, criteria, optim, sched,
-                       eps,'cuda')
+model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,
+                       num_epochs=10)
