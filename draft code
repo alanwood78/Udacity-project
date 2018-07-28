@@ -72,6 +72,13 @@ dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=32,
                                               shuffle=True)
                for x in ['train', 'valid', 'test']}
 
+image_datasets = {x: datasets.ImageFolder(dirs[x], transform=data_transforms[x])
+                  for x in list(data_transforms.keys())}
+
+dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=32,
+                                              shuffle=True)
+               for x in ['train', 'valid', 'test']}
+
 class_to_idx = image_datasets['train'].class_to_idx
 class_names = image_datasets['train'].classes
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -107,9 +114,6 @@ inputs, classes = next(iter(dataloaders['train']))
 # Make a grid from batch
 out = torchvision.utils.make_grid(inputs)
 
-imshow(out, title=[class_names[x] for x in classes])
-
-
 model = models.vgg16(pretrained=True)
 for param in model.parameters():
     param.requires_grad = False
@@ -132,7 +136,8 @@ class FFClassifier(nn.Module):
 
         x = F.log_softmax(x, dim=1)
         return x
-
+    
+model.class_to_idx = class_to_idx
 
 net = FFClassifier(25088, 4096, len(label_map))
 # Put your classifier on the pretrained network
@@ -209,4 +214,180 @@ optimizer = optim.Adam(model.classifier.parameters(), lr=learning_rate)
 train(model, epochs, learning_rate, criterion, optimizer, dataloaders['train'], dataloaders['valid'])
 
 model = model.cuda()
+
+phase = 'test'
+
+with torch.no_grad():
+    if torch.cuda.is_available():
+        print("Using GPU")
+        device = torch.device("cuda:0")
+    else:
+        print("Using CPU")
+        device = torch.device("cpu")
+        
+test_loss, accuracy = validate(model, criterion, dataloaders['test'])
+print("Accuracy of the network on the test images: {:.3f}".format(accuracy))
+print("Loss average: {:.3f}".format(test_loss))
+
+checkpoint_path = 'vgg16_checkpoint.pth'
+
+model.class_to_idx = image_datasets['train'].class_to_idx
+model.cpu()
+torch.save({'arch': 'vgg16',
+            'state_dict': model.state_dict(), 
+            'class_to_idx': model.class_to_idx}, 
+            'classifier.pth')
+
+checkpoint_path = 'vgg16_checkpoint.pth'
+class_to_idx = state['class_to_idx']
+
+model.load_state_dict(state['state_dict'])
+optimizer.load_state_dict(state['optimizer'])
+
+print("Loaded '{}')".format(
+    checkpoint_path))
+
+checkpoint_path = 'vgg16_checkpoint.pth'
+state = torch.load(checkpoint_path)
+class_to_idx = state['class_to_idx']
+
+model.load_state_dict(state['state_dict'])
+optimizer.load_state_dict(state['optimizer'])
+
+print("Loaded '{}')".format(
+    checkpoint_path))
+
+def process_image(image):
+    ''' Scales, crops, and normalizes a PIL image for a PyTorch model,
+        returns an Numpy array
+    '''
+    size = 224
+    # TODO: Process a PIL image for use in a PyTorch model
+    width, height = image.size
+    
+    if height > width:
+        height = int(max(height * size / width, 1))
+        width = int(size)
+    else:
+        width = int(max(width * size / height, 1))
+        height = int(size)
+        
+    resized_image = image.resize((width, height))
+        
+    x0 = (width - size) / 2
+    y0 = (height - size) / 2
+    x1 = x0 + size
+    y1 = y0 + size
+    cropped_image = image.crop((x0, y0, x1, y1))
+    np_image = np.array(cropped_image) / 255.
+    mean = np.array([0.485, 0.456, 0.406])
+    std = np.array([0.229, 0.224, 0.225])     
+    np_image_array = (np_image - mean) / std
+    np_image_array = np_image.transpose((2, 0, 1))
+    
+    return np_image_array
+
+def imshow(image, ax=None, title=None):
+    """Imshow for Tensor."""
+    if ax is None:
+        fig, ax = plt.subplots()
+    
+    # PyTorch tensors assume the color channel is the first dimension
+    # but matplotlib assumes is the third dimension
+    image = image.numpy().transpose((1, 2, 0))
+    
+    # Undo preprocessing
+    mean = np.array([0.485, 0.456, 0.406])
+    std = np.array([0.229, 0.224, 0.225])
+    image = std * image + mean
+    
+    # Image needs to be clipped between 0 and 1 or it looks like noise when displayed
+    image = np.clip(image, 0, 1)
+    
+    ax.imshow(image)
+    
+    return ax
+
+def predict(image_path, model, topk=5):
+    ''' Predict the class (or classes) of an image using a trained deep learning model.
+    '''
+    model.eval()
+    use_gpu = False 
+    if torch.cuda.is_available():
+        use_gpu = True
+        model = model.cuda()
+    else:
+        model = model.cpu()
+    image = Image.open(image_path)
+    np_array = process_image(image)
+    tensor = torch.from_numpy(np_array)
+    if use_gpu:
+        var_inputs = Variable(tensor.float().cuda(), volatile=True)
+    else:       
+        var_inputs = Variable(tensor, volatile=True)
+    var_inputs = var_inputs.unsqueeze(0)
+    output = model.forward(var_inputs)  
+    ps = torch.exp(output).data.topk(topk)
+    probabilities = ps[0].cpu() if use_gpu else ps[0]
+    classes = ps[1].cpu() if use_gpu else ps[1]
+    class_to_idx_inverted = {model.class_to_idx[k]: k for k in model.class_to_idx}
+    mapped_classes = list()
+    for label in classes.numpy()[0]:
+        mapped_classes.append(class_to_idx_inverted[label])
+    return probabilities.numpy()[0], mapped_classes
+
+image_path = test_dir + '/1/image_06743.jpg '
+probabilities, classes = predict(image_path, model)
+
+print(probabilities)
+print(classes)
+
+# TODO: Display an image along with the top 5 classes
+
+image_path = test_dir + '/1/image_06743.jpg'
+probabilities, classes = predict(image_path, model)
+max_index = np.argmax(probabilities)
+max_probability = probabilities[max_index]
+label = classes[max_index]
+
+fig = plt.figure(figsize=(6,6))
+ax1 = plt.subplot2grid((15,9), (0,0), colspan=9, rowspan=9)
+ax2 = plt.subplot2grid((15,9), (9,2), colspan=5, rowspan=5)
+
+image = Image.open(image_path)
+ax1.axis('off')
+ax1.set_title(label_map[label])
+ax1.imshow(image)
+labels = []
+for cl in classes:
+    labels.append(label_map[cl])
+y_pos = np.arange(5)
+ax2.set_yticks(y_pos)
+ax2.set_yticklabels(labels)
+ax2.invert_yaxis()  # probabilities read top-to-bottom
+ax2.set_xlabel('Probability')
+ax2.barh(y_pos, probabilities, xerr=0, align='center')
+
+plt.show()
+
+img = mpimg.imread('flowers/test/13/image_05769.jpg')
+y_pos = np.arange(5)
+probabilities, classes = predict(image_path, model)
+max_index = np.argmax(probabilities)
+max_probability = probabilities[max_index]
+label = classes[max_index]
+
+f, axarr = plt.subplots(2,1)
+
+axarr[0].imshow(img)
+axarr[0].set_title('hard-leaved pocket orchid')
+
+axarr[1].barh(y_pos, probabilities, align='center', color='blue')
+axarr[1].set_yticks(y_pos)
+axarr[1].set_yticklabels(classes)
+axarr[1].invert_yaxis()  # labels read top-to-bottom
+_ = axarr[1].set_xlabel('probabilities')
+
+plt.show()
+
 
