@@ -389,5 +389,3 @@ axarr[1].invert_yaxis()  # labels read top-to-bottom
 _ = axarr[1].set_xlabel('probabilities')
 
 plt.show()
-
-
